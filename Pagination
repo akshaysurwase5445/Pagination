@@ -1,0 +1,159 @@
+
+  ******************** pagination *************************
+   
+   wright all the Classes,Model classes, variable globally
+  **************  For pagination you have to pass page number to backend page = 1  ***************
+                 
+      eg:
+              getNearbyTrips(currentLatitude, currentLongitude, token, page);
+                         
+                                   
+ ***********************  To Load next page after the first one do this  ************************
+      eg: 
+              call this method in recyclerview scrolling hangle
+              
+              loadMoreNearTrips(currentLatitude, currentLatitude, token, page);
+
+    
+    RecyclerView recyclerView;
+
+                              // Pagination
+    private int page = 1;
+    private int item_count = 10;
+    private ProgressBar page_progress;
+    private boolean isLoading = true;
+    private int visibleThreshold = 10;
+    private int pastVisiblesItems, visibleItemCount, totalItemCount, previous_total = 0;
+    private LinearLayoutManager linearLayoutManager;
+    
+    
+                       // initialize recyclerView
+       
+       recyclerView = view.findViewById(R.id.recyclerview_nearme_trips_list);
+       recyclerView.setHasFixedSize(true);
+       linearLayoutManager = new LinearLayoutManager(getActivity(), LinearLayoutManager.VERTICAL, false);
+       recyclerView.setLayoutManager(linearLayoutManager);
+       
+       
+                      // Add this to your code
+      
+                             // recyclerView Scrolling Handle
+
+        recyclerView.setNestedScrollingEnabled(false);
+        recyclerView.setHasFixedSize(false);
+        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+
+
+                visibleItemCount = linearLayoutManager.getChildCount();
+                totalItemCount = linearLayoutManager.getItemCount();
+                pastVisiblesItems = linearLayoutManager.findFirstVisibleItemPosition();
+
+                if (dy > 0) {
+
+                    if (isLoading) {
+
+                        if (totalItemCount > previous_total) {
+
+                            isLoading = false;
+                            previous_total = totalItemCount;
+                        }
+                    }
+
+                    if (!isLoading && (totalItemCount - visibleItemCount) <= (pastVisiblesItems + visibleThreshold)) {
+
+                        page++;
+
+                        // LOAD MORE DATA
+                        loadMoreNearTrips(currentLatitude, currentLatitude, token, page);
+
+                        isLoading = true;
+                    }
+                }
+
+            }
+
+        });
+
+      ********************************  load more data method ************************************
+      
+// ***************************************** Method ****************************************************//
+    private void loadMoreNearTrips(double currentLatitude, double currentLongitude, String token, int page) {
+
+        page_progress.setVisibility(View.VISIBLE);
+
+        nearTripsInterface = APIClient.getClient().create(NearTripsInterface.class);
+
+        Call<NearMeTripModel> call = nearTripsInterface.transporter_neartrips("Bearer " + token, currentLatitude, currentLongitude, page);
+
+
+        //Api call
+        call.enqueue(new Callback<NearMeTripModel>() {
+
+            @Override
+            public void onResponse(Call<NearMeTripModel> call, Response<NearMeTripModel> response) {
+
+                if (response.toString().contains("code=200")) {
+
+                    if (response.body().getStatus() == 1) {
+                        NearMeTripModel nearMeTripsModel = response.body();
+
+                        NearMeTripResult nearMeTripResult = nearMeTripsModel.getResult();
+
+                        nearMeTripsDatum = nearMeTripResult.getData();
+
+
+                        adapter.addData(nearMeTripsDatum);
+                        page_progress.setVisibility(View.GONE);
+
+                        if (nearMeTripResult.getNextPageUrl() == null) {
+
+                            //Toast.makeText(getActivity(), ""+response.body().getMsg(), Toast.LENGTH_SHORT).show();
+                            //Toast.makeText(getActivity(), "Your Reach At End..", Toast.LENGTH_SHORT).show();
+                        }
+
+                        if (response.body().getStatus() == 0) {
+                            Toast.makeText(getActivity(), "" + response.body().getMsg(), Toast.LENGTH_SHORT).show();
+                            page_progress.setVisibility(View.GONE);
+                        }
+                    }
+
+
+                } else if (response.toString().contains("code=401")) {
+
+                    Toast.makeText(getActivity(), "Token Expired", Toast.LENGTH_SHORT).show();
+
+                    if (session.loggedin()) {
+                        session.setLoggedin(false);
+                    }
+                    LayoutInflater factory = LayoutInflater.from(getActivity());
+                    final View deleteDialogView = factory.inflate(R.layout.raw_for_session_expired, null);
+                    final AlertDialog deleteDialog = new AlertDialog.Builder(getActivity()).create();
+                    deleteDialog.setView(deleteDialogView);
+
+                    deleteDialogView.findViewById(R.id.session_exp_login).setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+
+
+                            getActivity().finish();
+                            Intent i = new Intent(getActivity(), LoginActivity.class);
+                            startActivity(i);
+
+                        }
+                    });
+
+                    deleteDialog.show();
+                    deleteDialog.setCancelable(false);
+                }
+            }
+
+            @Override
+            public void onFailure(Call<NearMeTripModel> call, Throwable t) {
+                progress.dismiss();
+                Toast.makeText(getActivity(), "" + t.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
